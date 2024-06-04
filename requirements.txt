@@ -1,22 +1,8 @@
-yolov5
-opencv-python
 streamlit
+opencv-python
 numpy
-Pillow
 torch
-torchvision
-PyYAML
-tqdm
-matplotlib
+Pillow
+geopy
 requests
-scipy
-tensorboard
-pandas
-seaborn
-streamlit-webrtc
-IPython
-torchaudio
-ultralytics
-geopy  # Optional
-smtplib  # Optional
-email  # Optional
+torchvision
