@@ -1,9 +1,17 @@
 yolov5
 opencv-python-headless
 streamlit
+cv2
 numpy
+torch
+tempfile
+PIL
+geopy
+requests
+smtplib
+email
+uuid
 Pillow
-torch==2.0.0
 torchvision
 PyYAML
 tqdm
@@ -15,8 +23,3 @@ pandas
 seaborn
 streamlit-webrtc
 IPython
-geopy
-email
-ssl
-tempfile
-uuid
