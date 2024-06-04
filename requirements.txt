@@ -15,3 +15,10 @@ pandas
 seaborn
 streamlit-webrtc
 IPython
+streamlit
+torch torchvision torchaudio
+ultralytics/yolov5  # Assuming you installed it from GitHub
+opencv-python
+geopy  # Optional for location services
+smtplib  # Optional for email sending
+email  # Optional for email sending
