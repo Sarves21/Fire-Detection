@@ -3,7 +3,7 @@ opencv-python-headless
 streamlit
 numpy
 Pillow
-torch
+torch==2.0.0
 torchvision
 PyYAML
 tqdm
@@ -16,7 +16,6 @@ seaborn
 streamlit-webrtc
 IPython
 geopy
-smtplib
 email
 ssl
 tempfile
