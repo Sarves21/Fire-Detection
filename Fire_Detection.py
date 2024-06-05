@@ -164,9 +164,12 @@ elif app_mode == 'Detect on Video':
     st.subheader("Detect Fire in Video")
     st.write("Upload a video to detect fire.")
 
-       video_file = st.file_uploader("Upload Video", type=['mp4', 'avi', 'mov'])
+    video_file = st.file_uploader("Upload Video", type=['mp4', 'avi', 'mov'])
 
     if video_file is not None:
+        # Load the YOLOv5 model
+        model = load_model()
+
         tffile = tempfile.NamedTemporaryFile(delete=False)
         tffile.write(video_file.read())
 
@@ -187,7 +190,7 @@ elif app_mode == 'Detect on Video':
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
             # Perform fire detection on each frame
-            results = load_model()(frame)
+            results = model(frame)
             detections = results.xyxy[0]
             fire_count += sum(1 for d in detections if d[4] >= 0.7)  # Count detections with confidence >= 0.7
             frame_count += 1
@@ -196,6 +199,7 @@ elif app_mode == 'Detect on Video':
 
         st.write(f"Number of frames processed: {frame_count}")
         st.write(f"Number of fires detected: {fire_count}")
+
 
 elif app_mode == 'Detect on WebCam':
     # Display settings for real-time webcam detection
@@ -240,4 +244,3 @@ elif app_mode == 'Detect on WebCam':
                                            "Fire detected, please respond immediately.", detected_object_path,
                                            original_image_path, weather_data, location)
                 st.write("Fire detected! Email alert sent to relevant departments.")
-
