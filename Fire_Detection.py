@@ -6,6 +6,7 @@ import tempfile
 from PIL import Image
 from geopy.geocoders import Nominatim
 import requests
+from streamlit_webrtc import VideoTransformerBase, webrtc_streamer
 
 # Function to load the YOLOv5 model
 @st.cache_resource
@@ -40,7 +41,7 @@ def get_user_location():
 # Function to get weather data using latitude and longitude
 def get_weather(latitude, longitude):
     # Replace 'YOUR_API_KEY' with your actual API key
-    api_key = '12a9f83a6662d44f674807a4b7cbb15e'
+    api_key = '19b1d383b69e6c595c4e1fb3e5191c96'
     api_url = f'http://api.openweathermap.org/data/2.5/weather?lat={latitude}&lon={longitude}&appid={api_key}&units=metric'
     response = requests.get(api_url)
     if response.status_code == 200:
@@ -96,6 +97,20 @@ def send_email_with_attachment(sender_email, password, department_emails, subjec
         server.sendmail(sender_email, receiver_email, text)
         server.quit()
 
+# Define a video transformer class for real-time video processing
+class VideoTransformer(VideoTransformerBase):
+    def __init__(self):
+        self.model = load_model()
+
+    def transform(self, frame):
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = self.model(frame)
+        detections = results.xyxy[0]
+        length = sum(1 for d in detections if d[4] >= 0.7)  # Count detections with confidence >= 0.7
+        output = np.squeeze(results.render())
+
+        return cv2.cvtColor(output, cv2.COLOR_RGB2BGR), length
+
 # Set the background color
 background_color = "#00ff00"  # blue color, you can use any other color code
 
@@ -111,175 +126,118 @@ st.markdown(f"""
     </style>
 """, unsafe_allow_html=True)
 
-# Load the YOLOv5 model
-model = load_model()
-
-# Define demo image and video paths
-demo_img = "fire.9.png"
-demo_video = "Fire_Video.mp4"
-
-# Continue with sending email with location information...
-
+# Display title and sidebar
 st.title('Fire Detection')
 st.sidebar.title('App Mode')
-
-app_mode = st.sidebar.selectbox('Choose the App Mode',
-                                ['About App', 'Detect on Image', 'Detect on Video', 'Detect on WebCam'])
+app_mode = st.sidebar.selectbox('Choose the App Mode', ['About App', 'Detect on Image', 'Detect on Video', 'Detect on WebCam'])
 
 if app_mode == 'About App':
+    # Display about app information
     st.subheader("About")
-    st.markdown(' <h5>🔥 WildfireEye: YOLO-Based Forest Fire Detection and Alert System</h5>', unsafe_allow_html=True)
-
+    st.markdown('<h5>🔥 WildfireEye: YOLO-Based Forest Fire Detection and Alert System</h5>', unsafe_allow_html=True)
     st.markdown("- <h5>Forest Fire</h5>", unsafe_allow_html=True)
     st.image("Images/Forest-Fire-Protection.jpg")
     st.markdown("- <h5>Detection system on YOLO</h5>", unsafe_allow_html=True)
     st.image("Images/10-Figure11-1.png")
+    st.markdown("## Features\n- Detect on Image\n- Detect on Videos\n- Live Detection")
 
-    st.markdown("""
-                ## Features
-- Detect on Image
-- Detect on Videos
-- Live Detection
-""")
+elif app_mode == 'Detect on Image':
+    # Code for image detection
+    st.subheader("Detect Fire in Image")
+    st.write("Upload an image to detect fire.")
 
-if app_mode == 'Detect on Image':
-    st.subheader("Detected Fire:")
-    text = st.markdown("")
+    img_file = st.file_uploader("Upload Image", type=["jpg", "jpeg", "png"])
 
-    st.sidebar.markdown("---")
-    # Input for Image
-    img_file = st.sidebar.file_uploader("Upload an Image", type=["jpg", "jpeg", "png"])
-    if img_file:
+    if img_file is not None:
         image = np.array(Image.open(img_file))
-    else:
-        image = np.array(Image.open(demo_img))
+        st.image(image, caption="Uploaded Image", use_column_width=True)
 
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("Original Image")
-    st.sidebar.image(image)
-
-    # predict the image
-    results = model(image)
-    length = len(results.xyxy[0])
-    output = np.squeeze(results.render())
-    text.write(f"<h1 style='text-align: center; color:red;'>{length}</h1>", unsafe_allow_html=True)
-    st.subheader("Output Image")
-    st.image(output, use_column_width=True)
-
-if app_mode == 'Detect on Video':
-    st.subheader("Detected Fire:")
-    text = st.markdown("")
-
-    st.sidebar.markdown("---")
-
-    st.subheader("Output")
-    stframe = st.empty()
-
-    # Input for Video
-    video_file = st.sidebar.file_uploader("Upload a Video", type=['mp4', 'mov', 'avi', 'asf', 'm4v'])
-    st.sidebar.markdown("---")
-    tffile = tempfile.NamedTemporaryFile(delete=False)
-
-    if not video_file:
-        tffile.name = demo_video
-    else:
-        tffile.write(video_file.read())
-        tffile.name = video_file.name
-
-    st.sidebar.markdown("Input Video")
-    st.sidebar.video(tffile.name)
-
-    # predict the video
-    vid = cv2.VideoCapture(tffile.name)
-    while vid.isOpened():
-        ret, frame = vid.read()
-        if not ret:
-            break
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        results = model(frame)
+        # Perform fire detection on the uploaded image
+        results = load_model()(image)
         detections = results.xyxy[0]
-        length = sum(1 for d in detections if d[4] >= 0.7)  # Count detections with confidence >= 0.7
-        output = np.squeeze(results.render())
-        text.write(f"<h1 style='text-align: center; color:red;'>{length}</h1>", unsafe_allow_html=True)
-        stframe.image(output)
+        fire_count = sum(1 for d in detections if d[4] >= 0.7)  # Count detections with confidence >= 0.7
 
-if app_mode == 'Detect on WebCam':
-    st.subheader("Detected Fire:")
-    text = st.markdown("")
+        st.write(f"Number of fires detected: {fire_count}")
 
-    st.sidebar.markdown("---")
+elif app_mode == 'Detect on Video':
+    # Code for video detection
+    st.subheader("Detect Fire in Video")
+    st.write("Upload a video to detect fire.")
 
-    st.sidebar.subheader("Settings")
-    threshold = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.7, 0.05)
+       video_file = st.file_uploader("Upload Video", type=['mp4', 'avi', 'mov'])
 
-    st.subheader("Output")
-    stframe = st.empty()
+    if video_file is not None:
+        tffile = tempfile.NamedTemporaryFile(delete=False)
+        tffile.write(video_file.read())
 
-    run = st.sidebar.button("Start")
-    stop = st.sidebar.button("Stop")
-    st.sidebar.markdown("---")
+        # Display uploaded video
+        st.video(tffile.name)
 
-    cam = cv2.VideoCapture(0)
+        # Open video file
+        vid = cv2.VideoCapture(tffile.name)
+        frame_count = 0
+        fire_count = 0
 
-    # Set frame width, height, and FPS
-    cam.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    cam.set(cv2.CAP_PROP_FPS, 30)
+        while vid.isOpened():
+            ret, frame = vid.read()
 
-    if run:
-        while True:
-            if stop:
-                break
-            ret, frame = cam.read()
-
-            # Check if the frame is not empty
             if not ret:
-                continue
+                break
 
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results = model(frame)
 
-            # Filter out detections below confidence threshold
-            detections = [d for d in results.xyxy[0] if d[4] >= threshold]
-            length = len(detections)
-            output = np.squeeze(results.render())
+            # Perform fire detection on each frame
+            results = load_model()(frame)
+            detections = results.xyxy[0]
+            fire_count += sum(1 for d in detections if d[4] >= 0.7)  # Count detections with confidence >= 0.7
+            frame_count += 1
 
-            # Crop and save the detected object if it has high confidence
+        vid.release()
+
+        st.write(f"Number of frames processed: {frame_count}")
+        st.write(f"Number of fires detected: {fire_count}")
+
+elif app_mode == 'Detect on WebCam':
+    # Display settings for real-time webcam detection
+    st.subheader("Real-time Fire Detection on WebCam")
+    st.markdown("Please grant access to your webcam to start real-time fire detection.")
+
+    # Display settings for email notification
+    st.sidebar.subheader("Email Notification")
+    sender_email = st.sidebar.text_input("Sender Email")
+    password = st.sidebar.text_input("Password", type="password")
+    department_emails = {
+        "Fire Department": st.sidebar.text_input("Fire Department Email"),
+        "Forest Department": st.sidebar.text_input("Forest Department Email"),
+        "Ambulance Department": st.sidebar.text_input("Ambulance Department Email")
+    }
+
+    # Initialize video streamer
+    webrtc_ctx = webrtc_streamer(key="fire-detection", video_transformer_factory=VideoTransformer)
+
+    if webrtc_ctx.video_transformer:
+        # Run the detection loop
+        while True:
+            frame, length = webrtc_ctx.video_transformer.recv()
+            if frame is None:
+                break
+
+            # Display the output frame with detected fire count
+            st.image(frame, channels="BGR", use_column_width=True)
+            st.markdown(f"<h3 style='text-align: center; color:red;'>Fire Count: {length}</h3>", unsafe_allow_html=True)
+
+            # Send email if fire is detected
             if length > 0:
-                detected_object = frame[int(detections[0][1]):int(detections[0][3]),
-                                  int(detections[0][0]):int(detections[0][2])]
-                cv2.imwrite('detected_object.jpg', cv2.cvtColor(detected_object, cv2.COLOR_RGB2BGR))
-                # Save the original image
-                cv2.imwrite('original_image.jpg', cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-                # Send email with the cropped and original images as attachments
-                sender_email = "f07387005@gmail.com"
-                password = "ynfr jeou yqgx gbje"
-                department_emails = {
-                    "Fire Department": "f07387005@gmail.com"
-                    # "Forest Department": "f07387005@gmail.com",
-                    # "Ambulance Department": "f07387005@gmail.com"
-                }
-                subject = "Emergency Alert!"
-                body = "Fire detected, please respond immediately."
-                attachment_path = 'detected_object.jpg'
-
-                # Get user's location
                 location = get_user_location()
                 latitude = location['latitude']
                 longitude = location['longitude']
-
-                # Get weather data
                 temperature, weather_description = get_weather(latitude, longitude)
                 weather_data = (temperature, weather_description)
 
-                # Path to the original image
-                original_attachment_path = 'original_image.jpg'
+                detected_object_path = 'detected_object.jpg'
+                original_image_path = 'original_image.jpg'
+                send_email_with_attachment(sender_email, password, department_emails, "Fire Alert!",
+                                           "Fire detected, please respond immediately.", detected_object_path,
+                                           original_image_path, weather_data, location)
+                st.write("Fire detected! Email alert sent to relevant departments.")
 
-                send_email_with_attachment(sender_email, password, department_emails, subject, body, attachment_path,
-                                           original_attachment_path, weather_data, location)
-                st.write("Fire detected and Alert sent!")
-
-            text.write(f"<h1 style='text-align: center; color:red;'>{length}</h1>", unsafe_allow_html=True)
-            stframe.image(output)
-
-    cam.release()
