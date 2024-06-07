@@ -149,11 +149,11 @@ elif option == "Webcam":
             location = get_user_location()
             if location and location['latitude'] and location['longitude']:
                                 temperature, weather_description = get_weather(location['latitude'], location['longitude'])
-                if temperature is not None and weather_description is not None:
+            if temperature is not None and weather_description is not None:
                     # Send email with detected image and weather information
-                    sender_email = "your_email@gmail.com"
-                    password = "your_email_password"
-                    department_emails = {"Fire Department": "fire_department@example.com"}
+                    sender_email = "f07387005@gmail.com"
+                    password = "ynfr jeou yqgx gbje1"
+                    department_emails = {"Fire Department": "f07387005@gmail.com"}
                     subject = "Fire Detected!"
                     body = "Fire has been detected. Please take necessary actions."
                     attachment_path = "detected_image.jpg"  # Path to the detected image
