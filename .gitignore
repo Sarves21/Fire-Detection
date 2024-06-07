@@ -1,0 +1,9 @@
+# Ignore .env file
+.env
+
+SENDER_EMAIL=f07387005@gmail.com
+EMAIL_PASSWORD=ynfr jeou yqgx gbje
+FIRE_DEPT_EMAIL=f07387005@gmail.com
+FOREST_DEPT_EMAIL=f07387005@gmail.com
+AMBULANCE_DEPT_EMAIL=f07387005@gmail.com
+WEATHER_API_KEY=12a9f83a6662d44f674807a4b7cbb15e
