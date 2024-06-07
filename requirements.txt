@@ -1,6 +1,5 @@
 yolov5
 opencv-python-headless
-libgl1-mesa-glx
 streamlit
 numpy
 Pillow
