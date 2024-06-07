@@ -1,5 +1,6 @@
 yolov5
-opencv_python_headless
+opencv-python-headless
+libgl1-mesa-glx
 streamlit
 numpy
 Pillow
@@ -15,5 +16,5 @@ pandas
 seaborn
 streamlit-webrtc
 IPython
-geocoder
 geopy
+geocoder
