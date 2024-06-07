@@ -104,8 +104,7 @@ def load_model():
     model = torch.hub.load('ultralytics/yolov5', 'custom', path="weights/best.pt", force_reload=True)
     return model
 
-# Load the YOLOv5 model
-model = load_model()
+
 
 
 demo_img = "fire.9.png"
