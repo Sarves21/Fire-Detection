@@ -16,3 +16,4 @@ seaborn
 streamlit-webrtc
 IPython
 geocoder
+geopy
