@@ -6,41 +6,46 @@ import tempfile
 from PIL import Image
 from geopy.geocoders import Nominatim
 import requests
+import os
+from dotenv import load_dotenv
 
-# Function to load the YOLOv5 model
-@st.cache_resource
-def load_model():
-    model = torch.hub.load('ultralytics/yolov5', 'custom', path="weights/best.pt", force_reload=True)
-    return model
+load_dotenv()
 
-# Function to get the user's location
-def get_user_location():
-    try:
-        response = requests.get("https://ipinfo.io/json")
-        data = response.json()
-        city = data.get("city")
-        region = data.get("region")
-        country = data.get("country")
+# Set the background color
+background_color = "#00ff00"  # green color
 
-        # Convert city name to latitude and longitude
+# Set the page configuration
+st.set_page_config(page_title="Fire Detection", page_icon="🔥", layout="wide", initial_sidebar_state="expanded")
+
+# Apply the background color using the theme configuration
+st.markdown(f"""
+    <style>
+        body {{
+            background-color: {background_color};
+        }}
+    </style>
+""", unsafe_allow_html=True)
+
+
+def get_location():
+    location = st.session_state.get("location")
+    if location:
+        return location
+    else:
+        # Use geopy to get coordinates
         geolocator = Nominatim(user_agent="streamlit_app")
-        location = geolocator.geocode(city)
+        location = geolocator.geocode("Madurai")
         if location:
+            city = location.raw.get('display_name', '').split(',')[0]
             latitude = location.latitude
             longitude = location.longitude
+            return {'city': city, 'latitude': latitude, 'longitude': longitude}
         else:
-            latitude = None
-            longitude = None
+            return None
 
-        return {'city': city, 'region': region, 'country': country, 'latitude': latitude, 'longitude': longitude}
-    except Exception as e:
-        print("Error fetching location:", e)
-        return None
-
-# Function to get weather data using latitude and longitude
 def get_weather(latitude, longitude):
     # Replace 'YOUR_API_KEY' with your actual API key
-    api_key = '19b1d383b69e6c595c4e1fb3e5191c96'
+    api_key = os.getenv('WEATHER_API_KEY')
     api_url = f'http://api.openweathermap.org/data/2.5/weather?lat={latitude}&lon={longitude}&appid={api_key}&units=metric'
     response = requests.get(api_url)
     if response.status_code == 200:
@@ -51,9 +56,8 @@ def get_weather(latitude, longitude):
     else:
         return None, None
 
-# Function to send email with attachments
 def send_email_with_attachment(sender_email, password, department_emails, subject, body, attachment_path,
-                               original_attachment_path, weather_data, location):
+                               location, weather_data):
     import smtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
@@ -68,8 +72,7 @@ def send_email_with_attachment(sender_email, password, department_emails, subjec
         message['Subject'] = subject
 
         # Construct the email body
-        location_str = f"Location: {location['city']}, {location['region']}, {location['country']}"
-        body_with_location = f"{body}\n\n{location_str}\nWeather: {weather_data[1]}, Temperature: {weather_data[0]} °C"
+        body_with_location = f"{body}\n\nLocation: {location['city']}, Latitude: {location['latitude']}, Longitude: {location['longitude']}\nWeather: {weather_data[1]}, Temperature: {weather_data[0]} °C"
         message.attach(MIMEText(body_with_location, "plain"))
 
         # Attach the cropped image
@@ -80,14 +83,6 @@ def send_email_with_attachment(sender_email, password, department_emails, subjec
         part.add_header('Content-Disposition', f"attachment; filename= {attachment_path}")
         message.attach(part)
 
-        # Attach the original image
-        original_attachment = open(original_attachment_path, "rb")
-        original_part = MIMEBase('application', 'octet-stream')
-        original_part.set_payload((original_attachment).read())
-        encoders.encode_base64(original_part)
-        original_part.add_header('Content-Disposition', f"attachment; filename= {original_attachment_path}")
-        message.attach(original_part)
-
         # Send the email
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
@@ -96,29 +91,20 @@ def send_email_with_attachment(sender_email, password, department_emails, subjec
         server.sendmail(sender_email, receiver_email, text)
         server.quit()
 
-# Set the background color
-background_color = "#00ff00"  # blue color, you can use any other color code
-
-# Set the page configuration
-st.set_page_config(page_title="Fire Detection", page_icon="🔥", layout="wide", initial_sidebar_state="expanded")
-
-# Apply the background color using the theme configuration
-st.markdown(f"""
-    <style>
-        body {{
-            background-color: {background_color};
-        }}
-    </style>
-""", unsafe_allow_html=True)
+@st.cache_resource
+def load_model():
+    model = torch.hub.load('ultralytics/yolov5', 'custom', path="weights/best.pt", force_reload=True)
+    return model
 
 # Load the YOLOv5 model
 model = load_model()
 
-# Define demo image and video paths
-demo_img = "fire.9.png"
-demo_video = "Fire_Video.mp4"
+def detect_fire(frame, model, threshold=0.7):
+    results = model(frame)
+    detections = [d for d in results.xyxy[0] if d[4] >= threshold]
+    img = np.squeeze(results.render())
 
-# Continue with sending email with location information...
+    return img, detections
 
 st.title('Fire Detection')
 st.sidebar.title('App Mode')
@@ -152,13 +138,14 @@ if app_mode == 'Detect on Image':
     if img_file:
         image = np.array(Image.open(img_file))
     else:
-        image = np.array(Image.open(demo_img))
+        image = np.array(Image.open("fire.9.png"))
 
     st.sidebar.markdown("---")
     st.sidebar.markdown("Original Image")
     st.sidebar.image(image)
 
     # predict the image
+    model = load_model()
     results = model(image)
     length = len(results.xyxy[0])
     output = np.squeeze(results.render())
@@ -181,21 +168,22 @@ if app_mode == 'Detect on Video':
     tffile = tempfile.NamedTemporaryFile(delete=False)
 
     if not video_file:
-        tffile.name = demo_video
+        vid = cv2.VideoCapture("Fire_Video.mp4")
+        tffile.name = "Fire_Video.mp4"
     else:
         tffile.write(video_file.read())
-        tffile.name = video_file.name
+        vid = cv2.VideoCapture(tffile.name)
 
     st.sidebar.markdown("Input Video")
     st.sidebar.video(tffile.name)
 
     # predict the video
-    vid = cv2.VideoCapture(tffile.name)
     while vid.isOpened():
         ret, frame = vid.read()
         if not ret:
             break
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        model = load_model()
         results = model(frame)
         detections = results.xyxy[0]
         length = sum(1 for d in detections if d[4] >= 0.7)  # Count detections with confidence >= 0.7
@@ -212,74 +200,45 @@ if app_mode == 'Detect on WebCam':
     st.sidebar.subheader("Settings")
     threshold = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.7, 0.05)
 
-    st.subheader("Output")
+    cap = cv2.VideoCapture(0)
+
     stframe = st.empty()
 
-    run = st.sidebar.button("Start")
-    stop = st.sidebar.button("Stop")
-    st.sidebar.markdown("---")
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            st.write("Failed to grab frame")
+            break
 
-    cam = cv2.VideoCapture(0)
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        output, detections = detect_fire(frame, model, threshold)
 
-    # Set frame width, height, and FPS
-    cam.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cam.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    cam.set(cv2.CAP_PROP_FPS, 30)
+        stframe.image(output, channels="RGB")
 
-    if run:
-        while True:
-            if stop:
-                break
-            ret, frame = cam.read()
+        if len(detections) > 0:
+            detected_object = frame[int(detections[0][1]):int(detections[0][3]),
+                                    int(detections[0][0]):int(detections[0][2])]
+            cv2.imwrite('detected_object.jpg', cv2.cvtColor(detected_object, cv2.COLOR_RGB2BGR))
 
-            # Check if the frame is not empty
-            if not ret:
-                continue
+            sender_email = os.getenv('SENDER_EMAIL')
+            password = os.getenv('EMAIL_PASSWORD')
+            department_emails = {
+                "Fire Department": os.getenv('FIRE_DEPT_EMAIL'),
+                "Forest Department": os.getenv('FOREST_DEPT_EMAIL'),
+                "Ambulance Department": os.getenv('AMBULANCE_DEPT_EMAIL')
+            }
+            subject = "Emergency Alert!"
+            body = "Fire detected, please respond immediately."
+            attachment_path = 'detected_object.jpg'
 
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            results = model(frame)
+            location = get_location()
+            latitude = location['latitude']
+            longitude = location['longitude']
 
-            # Filter out detections below confidence threshold
-            detections = [d for d in results.xyxy[0] if d[4] >= threshold]
-            length = len(detections)
-            output = np.squeeze(results.render())
+            temperature, weather_description = get_weather(latitude, longitude)
+            weather_data = (temperature, weather_description)
 
-            # Crop and save the detected object if it has high confidence
-            if length > 0:
-                detected_object = frame[int(detections[0][1]):int(detections[0][3]),
-                                  int(detections[0][0]):int(detections[0][2])]
-                cv2.imwrite('detected_object.jpg', cv2.cvtColor(detected_object, cv2.COLOR_RGB2BGR))
-                # Save the original image
-                cv2.imwrite('original_image.jpg', cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-                # Send email with the cropped and original images as attachments
-                sender_email = "f07387005@gmail.com"
-                password = "wzak hhdz tvis bnsw"
-                department_emails = {
-                    "Fire Department": "f07387005@gmail.com",
-                    "Forest Department": "f07387005@gmail.com",
-                    "Ambulance Department": "f07387005@gmail.com"
-                }
-                subject = "Emergency Alert!"
-                body = "Fire detected, please respond immediately."
-                attachment_path = 'detected_object.jpg'
+            send_email_with_attachment(sender_email, password, department_emails, subject, body, attachment_path, location, weather_data)
+            st.write("Fire detected and Alert sent!")
 
-                # Get user's location
-                location = get_user_location()
-                latitude = location['latitude']
-                longitude = location['longitude']
-
-                # Get weather data
-                temperature, weather_description = get_weather(latitude, longitude)
-                weather_data = (temperature, weather_description)
-
-                # Path to the original image
-                original_attachment_path = 'original_image.jpg'
-
-                send_email_with_attachment(sender_email, password, department_emails, subject, body, attachment_path,
-                                           original_attachment_path, weather_data, location)
-                st.write("Fire detected and Alert sent!")
-
-            text.write(f"<h1 style='text-align: center; color:red;'>{length}</h1>", unsafe_allow_html=True)
-            stframe.image(output)
-
-    cam.release()
+    cap.release()
