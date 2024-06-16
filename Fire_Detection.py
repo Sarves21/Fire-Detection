@@ -191,33 +191,30 @@ if app_mode == 'Detect on Video':
         text.write(f"<h1 style='text-align: center; color:red;'>{length}</h1>", unsafe_allow_html=True)
         stframe.image(output)
 
-if app_mode == 'Run on WebCam':
+if app_mode == 'Detect on WebCam':
     st.subheader("Detected Fire:")
     text = st.markdown("")
-    
+
     st.sidebar.markdown("---")
-    
-    st.subheader("Output")
+
+    st.sidebar.subheader("Settings")
+    threshold = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.7, 0.05)
+
+    cap = cv2.VideoCapture(0)
+
     stframe = st.empty()
-    
-    run = st.sidebar.button("Start")
-    stop = st.sidebar.button("Stop")
-    st.sidebar.markdown("---")
-    
-    cam = cv2.VideoCapture(0)
-    if(run):
-        while(True):
-            if(stop):
-                break
-            ret,frame = cam.read()
-            frame = cv2.cvtColor(frame,cv2.COLOR_BGR2RGB)
-            model = load_model()
-            results = model(frame)
-            length = len(results.xyxy[0])
-            output = np.squeeze(results.render())
-            text.write(f"<h1 style='text-align: center; color:red;'>{length}</h1>",unsafe_allow_html = True)
-            stframe.image(output)
-            
+
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            st.write("Failed to grab frame")
+            break
+
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        output, detections = detect_fire(frame, model, threshold)
+
+        stframe.image(output, channels="RGB")
+
         if len(detections) > 0:
             detected_object = frame[int(detections[0][1]):int(detections[0][3]),
                                     int(detections[0][0]):int(detections[0][2])]
