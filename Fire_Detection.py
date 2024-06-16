@@ -6,10 +6,6 @@ import tempfile
 from PIL import Image
 from geopy.geocoders import Nominatim
 import requests
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 # Set the background color
 background_color = "#00ff00"  # green color
@@ -25,7 +21,6 @@ st.markdown(f"""
         }}
     </style>
 """, unsafe_allow_html=True)
-
 
 def get_location():
     location = st.session_state.get("location")
@@ -44,8 +39,7 @@ def get_location():
             return None
 
 def get_weather(latitude, longitude):
-    # Replace 'YOUR_API_KEY' with your actual API key
-    api_key = os.getenv('WEATHER_API_KEY')
+    api_key = st.secrets["WEATHER_API_KEY"]
     api_url = f'http://api.openweathermap.org/data/2.5/weather?lat={latitude}&lon={longitude}&appid={api_key}&units=metric'
     response = requests.get(api_url)
     if response.status_code == 200:
@@ -76,20 +70,18 @@ def send_email_with_attachment(sender_email, password, department_emails, subjec
         message.attach(MIMEText(body_with_location, "plain"))
 
         # Attach the cropped image
-        attachment = open(attachment_path, "rb")
-        part = MIMEBase('application', 'octet-stream')
-        part.set_payload((attachment).read())
+        with open(attachment_path, "rb") as attachment:
+            part = MIMEBase('application', 'octet-stream')
+            part.set_payload(attachment.read())
         encoders.encode_base64(part)
         part.add_header('Content-Disposition', f"attachment; filename= {attachment_path}")
         message.attach(part)
 
         # Send the email
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(sender_email, password)
-        text = message.as_string()
-        server.sendmail(sender_email, receiver_email, text)
-        server.quit()
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(sender_email, password)
+            server.sendmail(sender_email, receiver_email, message.as_string())
 
 @st.cache_resource
 def load_model():
@@ -103,7 +95,6 @@ def detect_fire(frame, model, threshold=0.7):
     results = model(frame)
     detections = [d for d in results.xyxy[0] if d[4] >= threshold]
     img = np.squeeze(results.render())
-
     return img, detections
 
 st.title('Fire Detection')
@@ -115,12 +106,10 @@ app_mode = st.sidebar.selectbox('Choose the App Mode',
 if app_mode == 'About App':
     st.subheader("About")
     st.markdown(' <h5>🔥 WildfireEye: YOLO-Based Forest Fire Detection and Alert System</h5>', unsafe_allow_html=True)
-
     st.markdown("- <h5>Forest Fire</h5>", unsafe_allow_html=True)
     st.image("Images/Forest-Fire-Protection.jpg")
     st.markdown("- <h5>Detection system on YOLO</h5>", unsafe_allow_html=True)
     st.image("Images/10-Figure11-1.png")
-
     st.markdown("""
                 ## Features
 - Detect on Image
@@ -145,7 +134,6 @@ if app_mode == 'Detect on Image':
     st.sidebar.image(image)
 
     # predict the image
-    model = load_model()
     results = model(image)
     length = len(results.xyxy[0])
     output = np.squeeze(results.render())
@@ -158,7 +146,6 @@ if app_mode == 'Detect on Video':
     text = st.markdown("")
 
     st.sidebar.markdown("---")
-
     st.subheader("Output")
     stframe = st.empty()
 
@@ -183,7 +170,6 @@ if app_mode == 'Detect on Video':
         if not ret:
             break
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        model = load_model()
         results = model(frame)
         detections = results.xyxy[0]
         length = sum(1 for d in detections if d[4] >= 0.7)  # Count detections with confidence >= 0.7
@@ -196,12 +182,10 @@ if app_mode == 'Detect on WebCam':
     text = st.markdown("")
 
     st.sidebar.markdown("---")
-
     st.sidebar.subheader("Settings")
     threshold = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.7, 0.05)
 
     cap = cv2.VideoCapture(0)
-
     stframe = st.empty()
 
     while True:
@@ -212,7 +196,6 @@ if app_mode == 'Detect on WebCam':
 
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         output, detections = detect_fire(frame, model, threshold)
-
         stframe.image(output, channels="RGB")
 
         if len(detections) > 0:
@@ -220,12 +203,12 @@ if app_mode == 'Detect on WebCam':
                                     int(detections[0][0]):int(detections[0][2])]
             cv2.imwrite('detected_object.jpg', cv2.cvtColor(detected_object, cv2.COLOR_RGB2BGR))
 
-            sender_email = os.getenv('SENDER_EMAIL')
-            password = os.getenv('EMAIL_PASSWORD')
+            sender_email = st.secrets["SENDER_EMAIL"]
+            password = st.secrets["EMAIL_PASSWORD"]
             department_emails = {
-                "Fire Department": os.getenv('FIRE_DEPT_EMAIL'),
-                "Forest Department": os.getenv('FOREST_DEPT_EMAIL'),
-                "Ambulance Department": os.getenv('AMBULANCE_DEPT_EMAIL')
+                "Fire Department": st.secrets["FIRE_DEPT_EMAIL"],
+                "Forest Department": st.secrets["FOREST_DEPT_EMAIL"],
+                "Ambulance Department": st.secrets["AMBULANCE_DEPT_EMAIL"]
             }
             subject = "Emergency Alert!"
             body = "Fire detected, please respond immediately."
